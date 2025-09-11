@@ -1,0 +1,153 @@
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ======================
+// ENUMS
+// ======================
+enum AffiliateStatus {
+  pending
+  approved
+  rejected
+}
+
+enum LeadStatus {
+  new
+  approved
+  rejected
+}
+
+enum CommissionStatus {
+  pending
+  paid
+}
+
+enum PaymentStatus {
+  paid
+  failed
+  pending
+}
+
+enum CommissionRuleType {
+  flat
+  percentage
+  staged
+}
+
+// ======================
+// TABLES
+// ======================
+
+model Affiliates {
+  id              Int             @id @default(autoincrement())
+  code            String          @unique
+  name            String
+  email           String          @unique
+  password        String
+  link            String?
+  status          AffiliateStatus @default(pending)
+  payment_details Json?
+  created_at      DateTime        @default(now())
+  updated_at      DateTime        @updatedAt
+
+  referralClicks ReferralClicks[]
+  leads          Leads[]
+  commissions    Commissions[]
+  payments       Payments[]
+}
+
+model ReferralClicks {
+  id            Int        @id @default(autoincrement())
+  affiliate     Affiliates @relation(fields: [affiliate_id], references: [id])
+  affiliate_id  Int
+  campaign_code String
+  ip_address    String
+  user_agent    String
+  clicked_at    DateTime
+  created_at    DateTime   @default(now())
+  updated_at    DateTime   @updatedAt
+}
+
+model Leads {
+  id              Int        @id @default(autoincrement())
+  affiliate       Affiliates @relation(fields: [affiliate_id], references: [id])
+  affiliate_id    Int
+  name            String
+  email           String     @unique
+  phone           String
+  status          LeadStatus @default(new)
+  source_campaign String
+  created_at      DateTime   @default(now())
+  updated_at      DateTime   @updatedAt
+
+  orders Orders[]
+}
+
+model Orders {
+  id           Int      @id @default(autoincrement())
+  lead         Leads    @relation(fields: [lead_id], references: [id])
+  lead_id      Int
+  total_amount Int
+  down_payment Decimal
+  installments Int
+  status       String
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  commissions Commissions[]
+}
+
+model Commissions {
+  id           Int              @id @default(autoincrement())
+  order        Orders           @relation(fields: [order_id], references: [id])
+  order_id     Int
+  affiliate    Affiliates       @relation(fields: [affiliate_id], references: [id])
+  affiliate_id Int
+  rule         CommissionRules  @relation(fields: [rule_id], references: [id])
+  rule_id      Int
+  payment      Payments?        @relation(fields: [payment_id], references: [id])
+  payment_id   Int?
+  amount       Decimal
+  status       CommissionStatus @default(pending)
+  created_at   DateTime         @default(now())
+  updated_at   DateTime         @updatedAt
+
+  statusHistory CommissionStatusHistory[]
+}
+
+model CommissionStatusHistory {
+  id            Int              @id @default(autoincrement())
+  commission    Commissions      @relation(fields: [commission_id], references: [id])
+  commission_id Int
+  old_status    CommissionStatus
+  new_status    CommissionStatus
+  changed_at    DateTime         @default(now())
+  changed_by    String
+}
+
+model Payments {
+  id           Int           @id @default(autoincrement())
+  affiliate    Affiliates    @relation(fields: [affiliate_id], references: [id])
+  affiliate_id Int
+  total_amount Decimal
+  paid_at      DateTime
+  reference_no String
+  status       PaymentStatus
+  Commissions  Commissions[]
+}
+
+model CommissionRules {
+  id         Int                @id @default(autoincrement())
+  type       CommissionRuleType
+  parameters Json?
+  active     Boolean            @default(true)
+  created_at DateTime           @default(now())
+  updated_at DateTime           @updatedAt
+
+  commissions Commissions[]
+}
