@@ -1,7 +1,7 @@
 import prisma from "../models/prisma.js";
 import bcrypt from "bcryptjs";
 
-// 1️⃣ Register Affiliate
+// Register Affiliate
 const registerAffiliate = async (req, res) => {
   try {
     const { name, email, password } = req.body;
@@ -38,7 +38,7 @@ const registerAffiliate = async (req, res) => {
   }
 };
 
-// 2️⃣ Track Click
+// Track Click
 const trackClick = async (req, res) => {
   try {
     const { affiliate_code, campaign_code } = req.body;
@@ -66,7 +66,7 @@ const trackClick = async (req, res) => {
   }
 };
 
-// 3️⃣ Dashboard
+// Dashboard
 const getDashboard = async (req, res) => {
   try {
     const affiliate = await prisma.affiliates.findUnique({
