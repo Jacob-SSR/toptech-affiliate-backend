@@ -11,143 +11,149 @@ generator client {
 // ENUMS
 // ======================
 enum AffiliateStatus {
-  pending
-  approved
-  rejected
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 enum LeadStatus {
-  new
-  approved
-  rejected
+  NEW
+  APPROVED
+  REJECTED
 }
 
 enum CommissionStatus {
-  pending
-  paid
+  PENDING
+  PAID
 }
 
 enum PaymentStatus {
-  paid
-  failed
-  pending
+  PENDING
+  PAID
+  FAILED
 }
 
 enum CommissionRuleType {
-  flat
-  percentage
-  staged
+  FLAT
+  PERCENTAGE
+  STAGED
 }
 
 // ======================
-// TABLES
+// MODELS
 // ======================
 
-model Affiliates {
-  id              Int             @id @default(autoincrement())
-  code            String          @unique
-  name            String
-  email           String          @unique
-  password        String
-  link            String?
-  status          AffiliateStatus @default(pending)
-  payment_details Json?
-  created_at      DateTime        @default(now())
-  updated_at      DateTime        @updatedAt
+model Affiliate {
+  id             Int             @id @default(autoincrement())
+  code           String          @unique
+  name           String
+  email          String          @unique
+  password       String
+  link           String?
+  emailConfirmed Boolean         @default(false)
+  status         AffiliateStatus @default(PENDING)
+  paymentDetails Json?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
-  referralClicks ReferralClicks[]
-  leads          Leads[]
-  commissions    Commissions[]
-  payments       Payments[]
+  referralClicks ReferralClick[]
+  leads          Lead[]
+  commissions    Commission[]
+  payments       Payment[]
 }
 
-model ReferralClicks {
-  id            Int        @id @default(autoincrement())
-  affiliate     Affiliates @relation(fields: [affiliate_id], references: [id])
-  affiliate_id  Int
-  campaign_code String
-  ip_address    String
-  user_agent    String
-  clicked_at    DateTime
-  created_at    DateTime   @default(now())
-  updated_at    DateTime   @updatedAt
+model ReferralClick {
+  id           Int       @id @default(autoincrement())
+  affiliate    Affiliate @relation(fields: [affiliateId], references: [id])
+  affiliateId  Int
+  campaignCode String
+  ipAddress    String
+  userAgent    String
+  clickedAt    DateTime  @default(now())
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 }
 
-model Leads {
-  id              Int        @id @default(autoincrement())
-  affiliate       Affiliates @relation(fields: [affiliate_id], references: [id])
-  affiliate_id    Int
-  name            String
-  email           String     @unique
-  phone           String
-  status          LeadStatus @default(new)
-  source_campaign String
-  created_at      DateTime   @default(now())
-  updated_at      DateTime   @updatedAt
+model Lead {
+  id             Int        @id @default(autoincrement())
+  affiliate      Affiliate  @relation(fields: [affiliateId], references: [id])
+  affiliateId    Int
+  name           String
+  email          String
+  phone          String
+  status         LeadStatus @default(NEW)
+  sourceCampaign String
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
 
-  orders Orders[]
+  orders Order[]
+
+  @@unique([affiliateId, email])
 }
 
-model Orders {
+model Order {
   id           Int      @id @default(autoincrement())
-  lead         Leads    @relation(fields: [lead_id], references: [id])
-  lead_id      Int
-  total_amount Int
-  down_payment Decimal
+  lead         Lead     @relation(fields: [leadId], references: [id])
+  leadId       Int
+  totalAmount  Decimal  @db.Decimal(10, 2)
+  downPayment  Decimal  @db.Decimal(10, 2)
   installments Int
   status       String
-  created_at   DateTime @default(now())
-  updated_at   DateTime @updatedAt
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  commissions Commissions[]
+  commissions Commission[]
 }
 
-model Commissions {
-  id           Int              @id @default(autoincrement())
-  order        Orders           @relation(fields: [order_id], references: [id])
-  order_id     Int
-  affiliate    Affiliates       @relation(fields: [affiliate_id], references: [id])
-  affiliate_id Int
-  rule         CommissionRules  @relation(fields: [rule_id], references: [id])
-  rule_id      Int
-  payment      Payments?        @relation(fields: [payment_id], references: [id])
-  payment_id   Int?
-  amount       Decimal
-  status       CommissionStatus @default(pending)
-  created_at   DateTime         @default(now())
-  updated_at   DateTime         @updatedAt
+model Commission {
+  id          Int              @id @default(autoincrement())
+  order       Order            @relation(fields: [orderId], references: [id])
+  orderId     Int
+  affiliate   Affiliate        @relation(fields: [affiliateId], references: [id])
+  affiliateId Int
+  rule        CommissionRule   @relation(fields: [ruleId], references: [id])
+  ruleId      Int
+  payment     Payment?         @relation(fields: [paymentId], references: [id])
+  paymentId   Int?
+  amount      Decimal          @db.Decimal(10, 2)
+  status      CommissionStatus @default(PENDING)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
 
   statusHistory CommissionStatusHistory[]
 }
 
 model CommissionStatusHistory {
-  id            Int              @id @default(autoincrement())
-  commission    Commissions      @relation(fields: [commission_id], references: [id])
-  commission_id Int
-  old_status    CommissionStatus
-  new_status    CommissionStatus
-  changed_at    DateTime         @default(now())
-  changed_by    String
+  id           Int              @id @default(autoincrement())
+  commission   Commission       @relation(fields: [commissionId], references: [id])
+  commissionId Int
+  oldStatus    CommissionStatus
+  newStatus    CommissionStatus
+  changedAt    DateTime         @default(now())
+  changedBy    String
 }
 
-model Payments {
-  id           Int           @id @default(autoincrement())
-  affiliate    Affiliates    @relation(fields: [affiliate_id], references: [id])
-  affiliate_id Int
-  total_amount Decimal
-  paid_at      DateTime
-  reference_no String
-  status       PaymentStatus
-  Commissions  Commissions[]
+model Payment {
+  id          Int           @id @default(autoincrement())
+  affiliate   Affiliate     @relation(fields: [affiliateId], references: [id])
+  affiliateId Int
+  totalAmount Decimal       @db.Decimal(10, 2)
+  paidAt      DateTime?
+  referenceNo String
+  status      PaymentStatus
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  commissions Commission[]
 }
 
-model CommissionRules {
+model CommissionRule {
   id         Int                @id @default(autoincrement())
   type       CommissionRuleType
   parameters Json?
   active     Boolean            @default(true)
-  created_at DateTime           @default(now())
-  updated_at DateTime           @updatedAt
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
 
-  commissions Commissions[]
+  commissions Commission[]
 }

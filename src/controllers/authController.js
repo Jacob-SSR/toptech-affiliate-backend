@@ -7,7 +7,7 @@ const registerAffiliate = async (req, res) => {
     const { name, email, password } = req.body;
 
     // เช็ค email ซ้ำ
-    const exist = await prisma.affiliates.findUnique({ where: { email } });
+    const exist = await prisma.affiliate.findUnique({ where: { email } });
     if (exist)
       return res.status(400).json({ message: "Email already registered" });
 
@@ -15,7 +15,7 @@ const registerAffiliate = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // สร้าง affiliate
-    const affiliate = await prisma.affiliates.create({
+    const affiliate = await prisma.affiliate.create({
       data: {
         name,
         email,
@@ -26,7 +26,7 @@ const registerAffiliate = async (req, res) => {
 
     // สร้าง link แล้ว update DB
     const link = `https://paylater.toptechplaza.com?via=${affiliate.code}`;
-    await prisma.affiliates.update({
+    await prisma.affiliate.update({
       where: { id: affiliate.id },
       data: { link },
     });
@@ -43,19 +43,19 @@ const trackClick = async (req, res) => {
   try {
     const { affiliate_code, campaign_code } = req.body;
 
-    const affiliate = await prisma.affiliates.findUnique({
+    const affiliate = await prisma.affiliate.findUnique({
       where: { code: affiliate_code },
     });
     if (!affiliate)
       return res.status(404).json({ message: "Affiliate not found" });
 
-    await prisma.referralClicks.create({
+    await prisma.referralClick.create({
       data: {
-        affiliate_id: affiliate.id,
-        campaign_code: campaign_code || "default",
-        ip_address: req.ip,
-        user_agent: req.headers["user-agent"] || "unknown",
-        clicked_at: new Date(),
+        affiliateId: affiliate.id,
+        campaignCode: campaign_code || "default",
+        ipAddress: req.ip,
+        userAgent: req.headers["user-agent"] || "unknown",
+        clickedAt: new Date(),
       },
     });
 
@@ -69,7 +69,7 @@ const trackClick = async (req, res) => {
 // Dashboard
 const getDashboard = async (req, res) => {
   try {
-    const affiliate = await prisma.affiliates.findUnique({
+    const affiliate = await prisma.affiliate.findUnique({
       where: { code: req.params.code },
       include: { referralClicks: true },
     });
@@ -82,6 +82,7 @@ const getDashboard = async (req, res) => {
       link: affiliate.link,
       clicks: affiliate.referralClicks.length,
       status: affiliate.status,
+      emailConfirmed: affiliate.emailConfirmed,
     });
   } catch (err) {
     console.log(err);
