@@ -46,15 +46,20 @@ enum CommissionRuleType {
 model Affiliate {
   id             Int             @id @default(autoincrement())
   code           String          @unique
-  name           String
+  firstName      String
+  lastName       String
   email          String          @unique
   password       String
   link           String?
   emailConfirmed Boolean         @default(false)
   status         AffiliateStatus @default(PENDING)
   paymentDetails Json?
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  referredBy     String?
+  referredByUser Affiliate?      @relation("AffiliateReferrals", fields: [referredBy], references: [code])
+  referrals      Affiliate[]     @relation("AffiliateReferrals")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   referralClicks ReferralClick[]
   leads          Lead[]
