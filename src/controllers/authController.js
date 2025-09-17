@@ -29,22 +29,17 @@ const registerAffiliate = async (req, res) => {
         email,
         password: hashedPassword,
         code,
+        lastLinkUpdate: new Date(),
       },
-    });
-
-    const link = `https://paylater.toptechplaza.com?via=${affiliate.code}`;
-    await prisma.affiliate.update({
-      where: { id: affiliate.id },
-      data: { link },
     });
 
     res.json({
       message: "Registered successfully",
       affiliateCode: affiliate.code,
-      affiliateLink: link,
+      affiliateLink: `https://paylater.toptechplaza.com?via=${affiliate.code}`,
     });
   } catch (err) {
-    console.error(err);
+    console.error("REGISTER ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -54,12 +49,18 @@ const loginAffiliate = async (req, res) => {
     const { email, password } = req.body;
 
     const affiliate = await prisma.affiliate.findUnique({ where: { email } });
-    if (!affiliate)
+    if (!affiliate) {
       return res.status(404).json({ message: "Affiliate not found" });
+    }
 
     const validPassword = await bcrypt.compare(password, affiliate.password);
-    if (!validPassword)
+    if (!validPassword) {
       return res.status(401).json({ message: "Invalid password" });
+    }
+
+    if (!process.env.JWT_SECRET) {
+      throw new Error("JWT_SECRET is not defined in .env");
+    }
 
     const token = jwt.sign(
       { id: affiliate.id, code: affiliate.code, email: affiliate.email },
@@ -67,12 +68,27 @@ const loginAffiliate = async (req, res) => {
       { expiresIn: "7d" }
     );
 
-    res.json({ message: "Login successful", token });
+    res.json({
+      message: "Login successful",
+      token,
+      affiliateLink: `https://paylater.toptechplaza.com?via=${affiliate.code}`,
+    });
   } catch (err) {
-    console.error(err);
+    console.error("LOGIN ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 };
+
+const verifyToken = (req) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) throw new Error("No token provided");
+
+  const token = authHeader.split(" ")[1];
+  if (!token) throw new Error("No token provided");
+
+  return jwt.verify(token, process.env.JWT_SECRET);
+};
+
 
 const trackClick = async (req, res) => {
   try {
@@ -81,8 +97,9 @@ const trackClick = async (req, res) => {
     const affiliate = await prisma.affiliate.findUnique({
       where: { code: affiliate_code },
     });
-    if (!affiliate)
+    if (!affiliate) {
       return res.status(404).json({ message: "Affiliate not found" });
+    }
 
     await prisma.referralClick.create({
       data: {
@@ -90,70 +107,135 @@ const trackClick = async (req, res) => {
         campaignCode: campaign_code || "default",
         ipAddress: req.ip,
         userAgent: req.headers["user-agent"] || "unknown",
-        clickedAt: new Date(),
+        createdAt: new Date(),
       },
     });
 
     res.json({ message: "Click tracked" });
   } catch (err) {
-    console.error(err);
+    console.error("TRACK CLICK ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 };
 
 const getDashboard = async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader)
-      return res.status(401).json({ message: "No token provided" });
-
-    const token = authHeader.split(" ")[1];
-    if (!token) return res.status(401).json({ message: "No token provided" });
-
-    let decoded;
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
-    } catch {
-      return res.status(401).json({ message: "Invalid token" });
-    }
+    const decoded = verifyToken(req);
 
     const affiliate = await prisma.affiliate.findUnique({
       where: { id: decoded.id },
-      include: { referralClicks: true, referrals: true },
+      include: {
+        referralClicks: true,
+        leads: { include: { orders: true } },
+        commissions: true,
+      },
     });
 
-    if (!affiliate)
+    if (!affiliate) {
       return res.status(404).json({ message: "Affiliate not found" });
+    }
+
+    const totalClicks = affiliate.referralClicks.length;
+    const totalOrders = affiliate.leads.reduce(
+      (sum, lead) => sum + lead.orders.length,
+      0
+    );
+    const totalCommission = affiliate.commissions.reduce(
+      (sum, c) => sum + parseFloat(c.amount),
+      0
+    );
+
+    const conversionRate =
+      totalClicks > 0 ? ((totalOrders / totalClicks) * 100).toFixed(2) : 0;
+    const epc =
+      totalClicks > 0 ? (totalCommission / totalClicks).toFixed(2) : 0;
+
+    const days = [...Array(7)].map((_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (6 - i));
+      return d.toISOString().slice(0, 10);
+    });
+
+    const clicksByDay = days.map(
+      (d) =>
+        affiliate.referralClicks.filter(
+          (c) => c.createdAt.toISOString().slice(0, 10) === d
+        ).length
+    );
+
+    const commissionsByDay = days.map((d) =>
+      affiliate.commissions
+        .filter((c) => c.createdAt.toISOString().slice(0, 10) === d)
+        .reduce((sum, c) => sum + parseFloat(c.amount), 0)
+    );
 
     res.json({
       name: `${affiliate.firstName} ${affiliate.lastName}`,
-      link: affiliate.link,
-      clicks: affiliate.referralClicks.length,
-      totalReferrals: affiliate.referrals.length,
+      affiliateLink: `https://paylater.toptechplaza.com?via=${affiliate.code}`,
+      clicks: totalClicks,
+      orders: totalOrders,
+      commission: totalCommission,
+      conversionRate,
+      epc,
       status: affiliate.status,
       emailConfirmed: affiliate.emailConfirmed,
+      lastLinkUpdate: affiliate.lastLinkUpdate,
+      chart: { days, clicks: clicksByDay, commissions: commissionsByDay },
     });
   } catch (err) {
-    console.error(err);
+    console.error("DASHBOARD ERROR:", err);
+    res.status(401).json({ message: err.message });
+  }
+};
+
+const updateAffiliateLink = async (req, res) => {
+  try {
+    const decoded = verifyToken(req);
+
+    const affiliate = await prisma.affiliate.findUnique({
+      where: { id: decoded.id },
+    });
+    if (!affiliate) {
+      return res.status(404).json({ message: "Affiliate not found" });
+    }
+
+    if (affiliate.lastLinkUpdate) {
+      const nextUpdate = new Date(affiliate.lastLinkUpdate);
+      nextUpdate.setMonth(nextUpdate.getMonth() + 3);
+      if (new Date() < nextUpdate) {
+        return res.status(400).json({
+          message: `คุณสามารถแก้ไขลิงก์ได้อีกครั้งหลังวันที่ ${nextUpdate
+            .toISOString()
+            .slice(0, 10)}`,
+        });
+      }
+    }
+
+    const { newCode } = req.body;
+    if (!newCode || newCode.trim().length < 4) {
+      return res
+        .status(400)
+        .json({ message: "Code must be at least 4 characters" });
+    }
+
+    const updated = await prisma.affiliate.update({
+      where: { id: affiliate.id },
+      data: { code: newCode, lastLinkUpdate: new Date() },
+    });
+
+    res.json({
+      message: "Affiliate link updated successfully",
+      affiliateLink: `https://paylater.toptechplaza.com?via=${updated.code}`,
+    });
+  } catch (err) {
+    console.error("UPDATE LINK ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 };
 
 const getReferrals = async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader)
-      return res.status(401).json({ message: "No token provided" });
-
-    const token = authHeader.split(" ")[1];
-    if (!token) return res.status(401).json({ message: "No token provided" });
-
-    let decoded;
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
-    } catch {
-      return res.status(401).json({ message: "Invalid token" });
-    }
+    const decoded = verifyToken(req);
 
     const affiliate = await prisma.affiliate.findUnique({
       where: { id: decoded.id },
@@ -171,8 +253,9 @@ const getReferrals = async (req, res) => {
       },
     });
 
-    if (!affiliate)
+    if (!affiliate) {
       return res.status(404).json({ message: "Affiliate not found" });
+    }
 
     res.json({
       referrals: affiliate.referrals.map((r) => ({
@@ -184,7 +267,7 @@ const getReferrals = async (req, res) => {
       })),
     });
   } catch (err) {
-    console.error(err);
+    console.error("REFERRALS ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -194,5 +277,6 @@ export {
   loginAffiliate,
   trackClick,
   getDashboard,
+  updateAffiliateLink,
   getReferrals,
 };

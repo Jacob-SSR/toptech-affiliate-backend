@@ -57,6 +57,7 @@ model Affiliate {
   referredBy     String?
   referredByUser Affiliate?      @relation("AffiliateReferrals", fields: [referredBy], references: [code])
   referrals      Affiliate[]     @relation("AffiliateReferrals")
+  lastLinkUpdate DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
