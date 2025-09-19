@@ -160,6 +160,16 @@ const getReferrals = async (req, res) => {
             email: true,
             code: true,
             createdAt: true,
+            status: true,
+            leads: {
+              include: {
+                orders: {
+                  include: {
+                    commissions: true,
+                  },
+                },
+              },
+            },
           },
         },
       },
@@ -169,15 +179,35 @@ const getReferrals = async (req, res) => {
       return res.status(404).json({ message: "Affiliate not found" });
     }
 
-    res.json({
-      referrals: affiliate.referrals.map((r) => ({
+    const formatted = affiliate.referrals.map((r) => {
+      const totalLeads = r.leads.length;
+      const totalOrders = r.leads.reduce((sum, l) => sum + l.orders.length, 0);
+      const totalCommission = r.leads.reduce(
+        (sum, l) =>
+          sum +
+          l.orders.reduce(
+            (oSum, o) =>
+              oSum +
+              o.commissions.reduce((cSum, c) => cSum + parseFloat(c.amount), 0),
+            0
+          ),
+        0
+      );
+
+      return {
         id: r.id,
         name: `${r.firstName} ${r.lastName}`,
         email: r.email,
         code: r.code,
         registeredAt: r.createdAt,
-      })),
+        status: r.status,
+        leads: totalLeads,
+        orders: totalOrders,
+        commission: totalCommission,
+      };
     });
+
+    res.json({ referrals: formatted });
   } catch (err) {
     console.error("REFERRALS ERROR:", err);
     res.status(500).json({ error: err.message });
