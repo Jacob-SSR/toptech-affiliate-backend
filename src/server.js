@@ -3,7 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
-const { apiLimiter } = require("./utils/rateLimiter");
+// const { apiLimiter } = require("./utils/rateLimiter");
 const affiliateRouter = require("./routes/affiliateRoutes");
 const authRouter = require("./routes/authRoute");
 
@@ -16,7 +16,7 @@ app.use(morgan("dev"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use(apiLimiter);
+// app.use(apiLimiter);
 
 app.use("/api/affiliate", affiliateRouter);
 app.use("/api/affiliate", authRouter);
