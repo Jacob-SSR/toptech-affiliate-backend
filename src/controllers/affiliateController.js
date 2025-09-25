@@ -14,16 +14,49 @@ const trackClick = async (req, res) => {
     await prisma.referralClick.create({
       data: {
         affiliateId: affiliate.id,
-        campaignCode: campaign_code || "default",
+        campaignCode: campaign_code || "paylater",
         ipAddress: req.ip,
         userAgent: req.headers["user-agent"] || "unknown",
-        createdAt: new Date(),
       },
     });
 
-    res.json({ message: "Click tracked" });
+    res.json({ message: "Click tracked", success: true });
   } catch (err) {
     console.error("TRACK CLICK ERROR:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+const trackLead = async (req, res) => {
+  try {
+    const { referralCode, name, email, phone } = req.body;
+
+    if (!referralCode) {
+      return res.status(400).json({ message: "Referral code is required" });
+    }
+
+    const affiliate = await prisma.affiliate.findUnique({
+      where: { code: referralCode },
+    });
+
+    if (!affiliate) {
+      return res.status(404).json({ message: "Affiliate not found" });
+    }
+
+    // === เก็บ Lead ===
+    const lead = await prisma.lead.create({
+      data: {
+        affiliateId: affiliate.id,
+        name,
+        email,
+        phone,
+        sourceCampaign: "paylater",
+      },
+    });
+
+    res.json({ message: "Lead tracked", lead });
+  } catch (err) {
+    console.error("TRACK LEAD ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -79,7 +112,9 @@ const getDashboard = async (req, res) => {
 
     res.json({
       name: `${affiliate.firstName} ${affiliate.lastName}`,
-      affiliateLink: affiliate.link,
+      affiliateLink:
+        affiliate.link ||
+        `https://paylater.toptechplaza.com?via=${affiliate.code}`,
       clicks: totalClicks,
       orders: totalOrders,
       commission: totalCommission,
@@ -96,7 +131,6 @@ const getDashboard = async (req, res) => {
   }
 };
 
-// === Update Affiliate Link ===
 const updateAffiliateLink = async (req, res) => {
   try {
     const affiliate = await prisma.affiliate.findUnique({
@@ -105,18 +139,6 @@ const updateAffiliateLink = async (req, res) => {
     if (!affiliate) {
       return res.status(404).json({ message: "Affiliate not found" });
     }
-
-    // if (affiliate.lastLinkUpdate) {
-    //   const nextUpdate = new Date(affiliate.lastLinkUpdate);
-    //   nextUpdate.setMonth(nextUpdate.getMonth() + 3);
-    //   if (new Date() < nextUpdate) {
-    //     return res.status(400).json({
-    //       message: `คุณสามารถแก้ไขลิงก์ได้อีกครั้งหลังวันที่ ${nextUpdate
-    //         .toISOString()
-    //         .slice(0, 10)}`,
-    //     });
-    //   }
-    // }
 
     const { newCode } = req.body;
     if (!newCode || newCode.trim().length < 4) {
@@ -214,4 +236,10 @@ const getReferrals = async (req, res) => {
   }
 };
 
-export { trackClick, getDashboard, updateAffiliateLink, getReferrals };
+export {
+  trackClick,
+  trackLead,
+  getDashboard,
+  updateAffiliateLink,
+  getReferrals,
+};
