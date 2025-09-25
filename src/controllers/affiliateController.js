@@ -38,12 +38,10 @@ const trackLead = async (req, res) => {
     const affiliate = await prisma.affiliate.findUnique({
       where: { code: referralCode },
     });
-
     if (!affiliate) {
       return res.status(404).json({ message: "Affiliate not found" });
     }
 
-    // === เก็บ Lead ===
     const lead = await prisma.lead.create({
       data: {
         affiliateId: affiliate.id,
@@ -54,7 +52,7 @@ const trackLead = async (req, res) => {
       },
     });
 
-    res.json({ message: "Lead tracked", lead });
+    res.json({ message: "Lead tracked", success: true, lead });
   } catch (err) {
     console.error("TRACK LEAD ERROR:", err);
     res.status(500).json({ error: err.message });
